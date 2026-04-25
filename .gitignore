@@ -1,0 +1,15 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Developer tools
+benchmark_script.py
+.tempmediaStorage/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,17 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.db
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+benchmark_script.py
+README.md
+Implementation_Plan.md
+requirements.txt
+# Include minimal_requirements.txt as it's used in Dockerfile
+# Leave other data files (.csv, .pkl, .json) as they are needed for the app

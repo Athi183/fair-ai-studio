@@ -20,6 +20,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import seaborn as sns
 from pathlib import Path
+from scipy.stats import gaussian_kde
+import functools
 
 BASE_DIR = Path(__file__).parent
 
@@ -33,6 +35,18 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "frontend" / "static")), name="static")
+
+# ─── Cache / Preload ──────────────────────────────────────────────────────────
+
+@functools.lru_cache(maxsize=1)
+def load_models():
+    biased = joblib.load(BASE_DIR / "biased_model.pkl")
+    fair = joblib.load(BASE_DIR / "fair_model.pkl")
+    return biased, fair
+
+@functools.lru_cache(maxsize=1)
+def get_cleaned_data():
+    return pd.read_csv(BASE_DIR / "cleaned_data.csv")
 
 
 # ─── Helper ──────────────────────────────────────────────────────────────────
@@ -363,7 +377,7 @@ async def get_distributions_chart():
     Unique to the Dataset section — not a duplicate of the selection rate chart.
     """
     try:
-        df = pd.read_csv(BASE_DIR / "cleaned_data.csv")
+        df = get_cleaned_data()
         male   = df[df["gender"] == 1]
         female = df[df["gender"] == 0]
 
@@ -385,18 +399,16 @@ async def get_distributions_chart():
             ax.hist(male[col],   bins=bins, color=ACCENT,  alpha=0.45, label="Male",   zorder=2)
             ax.hist(female[col], bins=bins, color=PURPLE, alpha=0.45, label="Female", zorder=2)
 
-            # KDE overlay using numpy
+            # KDE overlay using scipy (much faster)
             for data, color in [(male[col].values, ACCENT), (female[col].values, PURPLE)]:
-                x_range = np.linspace(xmin, xmax, 300)
-                bw = (data.std() * (4 / (3 * len(data))) ** 0.2) if len(data) > 1 else 1
-                kde_y = np.array([
-                    np.mean(np.exp(-0.5 * ((x - data) / bw) ** 2) / (bw * np.sqrt(2 * np.pi)))
-                    for x in x_range
-                ])
-                # Scale KDE to histogram height
-                bin_w   = bins[1] - bins[0]
-                scale   = len(data) * bin_w
-                ax.plot(x_range, kde_y * scale, color=color, linewidth=2.2, zorder=4)
+                if len(data) > 1:
+                    kde = gaussian_kde(data)
+                    x_range = np.linspace(xmin, xmax, 200)
+                    kde_y = kde(x_range)
+                    # Scale KDE to histogram height
+                    bin_w   = bins[1] - bins[0]
+                    scale   = len(data) * bin_w
+                    ax.plot(x_range, kde_y * scale, color=color, linewidth=2.2, zorder=4)
 
             ax.set_xlabel(xlabel, color="#8b949e", fontsize=9)
             ax.set_ylabel("Count", color="#8b949e", fontsize=9)
@@ -433,8 +445,7 @@ async def predict_candidate(data: dict):
         feature_cols = ["gender", "age", "education_level", "experience_years", "screening_score"]
         row = pd.DataFrame([[data[c] for c in feature_cols]], columns=feature_cols)
 
-        biased_model = joblib.load(BASE_DIR / "biased_model.pkl")
-        fair_model = joblib.load(BASE_DIR / "fair_model.pkl")
+        biased_model, fair_model = load_models()
 
         # Load calibrated thresholds from Member 3
         with open(BASE_DIR / "comparison_results.json") as f:
@@ -463,7 +474,7 @@ async def predict_candidate(data: dict):
 async def get_dataset_stats():
     """Return aggregated dataset statistics for the data explorer section."""
     try:
-        df = pd.read_csv(BASE_DIR / "cleaned_data.csv")
+        df = get_cleaned_data()
 
         gender_dist = df["gender"].value_counts().to_dict()
         edu_dist = df["education_level"].value_counts().to_dict()
