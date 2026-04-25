@@ -25,4 +25,5 @@ COPY . .
 EXPOSE 8000
 
 # Command to run the application
-CMD uvicorn main:app --host 0.0.0.0 --port 8000
+# Use the shell form to allow environment variable expansion (like $PORT in Cloud Run)
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT
